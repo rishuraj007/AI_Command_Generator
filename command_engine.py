@@ -3,6 +3,41 @@ Command Engine
 Central orchestrator for parsing user input and generating HPE MSA commands
 """
 import re
+from ssh_connector import MSAConnector
+class CommandExecutor:
+    def __init__(self):
+        self.connector = None
+        self.connected = False
+        self.simulation_mode = True  # Safe default
+    
+    def set_mode(self, simulation=True):
+        """Toggle between simulation and live mode"""
+        self.simulation_mode = simulation
+    
+    def connect_to_array(self, host, username, password):
+        """Connect to MSA array"""
+        self.connector = MSAConnector(host, username, password)
+        result = self.connector.connect()
+        
+        if result is True:
+            self.connected = True
+            self.simulation_mode = False
+            return "✅ Connected to MSA array"
+        else:
+            return f"❌ {result}"
+    
+    def execute(self, command):
+        """Execute command (simulation or live)"""
+        if self.simulation_mode:
+            return f"[SIMULATION] Would execute: {command}"
+        
+        if not self.connected:
+            return "❌ Not connected to array. Use simulation mode or connect first."
+        
+        # Execute on real array
+        result = self.connector.execute_command(command)
+        return result
+    
 from disk_group import (
     create_disk_group, delete_disk_group, add_spare_disks, 
     remove_spare_disks, show_disk_groups
