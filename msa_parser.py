@@ -1,6 +1,6 @@
 """
-MSA XML Response Parser
-Parses HPE MSA XML outputs and extracts relevant information
+Enhanced MSA XML Response Parser
+Properly parses show disks, show volumes, and other MSA commands
 """
 import xml.etree.ElementTree as ET
 import re
@@ -78,6 +78,73 @@ class MSAResponseParser:
             return []
     
     @staticmethod
+    def parse_show_volumes(xml_string):
+        """
+        Parse 'show volumes' XML response
+        Returns list of volume objects
+        """
+        try:
+            root = ET.fromstring(xml_string)
+            volumes = []
+            
+            for obj in root.findall(".//OBJECT[@basetype='volumes']"):
+                volume = {}
+                
+                for prop in obj.findall("PROPERTY"):
+                    name = prop.get("name")
+                    value = prop.text or ""
+                    
+                    if name == "volume-name":
+                        volume["name"] = value
+                    elif name == "storage-pool-name":
+                        volume["pool"] = value
+                    elif name == "total-size":
+                        volume["total_size"] = value
+                    elif name == "allocated-size":
+                        volume["allocated_size"] = value
+                    elif name == "volume-type":
+                        volume["type"] = value
+                    elif name == "health":
+                        volume["health"] = value
+                    elif name == "health-reason":
+                        volume["health_reason"] = value
+                    elif name == "serial-number":
+                        volume["serial"] = value
+                
+                if "name" in volume:
+                    volumes.append(volume)
+            
+            return volumes
+            
+        except Exception as e:
+            print(f"Error parsing show volumes XML: {e}")
+            return []
+    
+    @staticmethod
+    def format_volumes_table(volumes):
+        """Format volumes as ASCII table"""
+        if not volumes:
+            return "No volumes found"
+        
+        lines = []
+        lines.append("┌─────────────────┬──────┬──────────────┬──────────────┬────────┐")
+        lines.append("│ Volume Name     │ Pool │ Total Size   │ Alloc Size   │ Health │")
+        lines.append("├─────────────────┼──────┼──────────────┼──────────────┼────────┤")
+        
+        for vol in volumes:
+            name = vol.get("name", "N/A")[:15].ljust(15)
+            pool = vol.get("pool", "N/A")[:4].ljust(4)
+            total = vol.get("total_size", "N/A")[:12].ljust(12)
+            alloc = vol.get("allocated_size", "N/A")[:12].ljust(12)
+            health = vol.get("health", "N/A")[:6].ljust(6)
+            
+            lines.append(f"│ {name} │ {pool} │ {total} │ {alloc} │ {health} │")
+        
+        lines.append("└─────────────────┴──────┴──────────────┴──────────────┴────────┘")
+        
+        return "\n".join(lines)
+    
+    @staticmethod
     def parse_command_response(xml_string):
         """
         Parse general command response and extract status
@@ -132,37 +199,46 @@ class MSAResponseParser:
             }
     
     @staticmethod
-    def parse_whoami(xml_string):
+    def parse_show_configuration(xml_string):
         """
-        Parse 'show configuration' or whoami-like response
-        Returns dict with user and system information
+        Parse 'show configuration' response for system info
+        Returns dict with system information
         """
         try:
             root = ET.fromstring(xml_string)
             
             info = {
-                "username": None,
                 "system_name": None,
                 "model": None,
-                "version": None
+                "vendor": None,
+                "version": None,
+                "location": None
             }
             
-            # Try to extract from various possible locations
+            # Look for system objects
             for obj in root.findall(".//OBJECT"):
-                for prop in obj.findall("PROPERTY"):
-                    name = prop.get("name")
-                    value = prop.text or ""
-                    
-                    if name == "system-name":
-                        info["system_name"] = value
-                    elif name == "product-id":
-                        info["model"] = value
-                    elif name == "sc-fw":
-                        info["version"] = value
+                basetype = obj.get("basetype", "")
+                
+                if basetype in ["system", "versions", "configuration"]:
+                    for prop in obj.findall("PROPERTY"):
+                        name = prop.get("name")
+                        value = prop.text or ""
+                        
+                        if name == "system-name":
+                            info["system_name"] = value
+                        elif name == "product-id":
+                            info["model"] = value
+                        elif name == "vendor-name":
+                            info["vendor"] = value
+                        elif name == "sc-fw" or name == "bundle-version":
+                            info["version"] = value
+                        elif name == "system-location":
+                            info["location"] = value
             
             return info
             
         except Exception as e:
+            print(f"Error parsing configuration: {e}")
             return {"error": str(e)}
     
     @staticmethod
@@ -183,8 +259,7 @@ class MSAResponseParser:
         ssd_free = len([d for d in disks if d.get("type") == "ssd" and d.get("status") == "free"])
         hdd_free = len([d for d in disks if d.get("type") == "hdd" and d.get("status") == "free"])
         
-        summary = f"""
-Disk Summary:
+        summary = f"""Disk Summary:
   Total Disks: {total}
   Used: {used}
   Available: {free}
@@ -195,7 +270,7 @@ Disk Summary:
         return summary
     
     @staticmethod
-    def format_disk_table(disks, max_display=10):
+    def format_disk_table(disks, max_display=20):
         """
         Format disk list as a table
         """

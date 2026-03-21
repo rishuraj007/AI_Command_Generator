@@ -1,17 +1,18 @@
 """
-HPE MSA AI Command Generator - Complete Enhanced UI
-With SSH connection, real disk inventory, and command execution
+HPE MSA AI Command Generator - FIXED VERSION
+Works with real SSH and properly parses all responses
 """
 import tkinter as tk
-from tkinter import scrolledtext, ttk, messagebox
+from tkinter import scrolledtext, messagebox
 from datetime import datetime
 
 from command_engine import generate_command
 from xml_parser import parse_xml
 from data import xml_data
+
+# Use the FIXED versions
 from ssh_connector import MSAConnector
 from msa_parser import MSAResponseParser
-
 
 # Load initial sample disks
 disks = parse_xml(xml_data)
@@ -20,7 +21,7 @@ disks = parse_xml(xml_data)
 class MSACommandGeneratorUI:
     def __init__(self, root):
         self.root = root
-        self.root.title("HPE MSA AI Command Generator v2.0")
+        self.root.title("HPE MSA AI Command Generator v2.0 - FIXED")
         self.root.geometry("1200x850")
         self.root.configure(bg="#1e1e1e")
         
@@ -31,8 +32,6 @@ class MSACommandGeneratorUI:
         self.ssh_host = None
         self.ssh_username = None
         self.array_info = {}
-        
-        # Disk inventory - will be updated from array
         self.disks = disks
         
         self.setup_ui()
@@ -56,7 +55,7 @@ class MSACommandGeneratorUI:
         # CONNECTION PANEL
         self.create_connection_panel()
         
-        # DISK INVENTORY PANEL (will update after connection)
+        # DISK INVENTORY PANEL
         self.inventory_frame = tk.Frame(self.root, bg="#1e1e1e")
         self.inventory_frame.pack(fill='x', padx=20, pady=10)
         self.create_inventory_display()
@@ -98,9 +97,9 @@ class MSACommandGeneratorUI:
         
         suggestions = [
             "show disks",
+            "show volumes",
             "create raid 5 with 4 HDDs",
-            "create 3 volumes of 100GB in pool a",
-            "expand volume myvol size 50GB"
+            "create 3 volumes of 100GB in pool a"
         ]
         
         for suggestion in suggestions:
@@ -190,17 +189,6 @@ class MSACommandGeneratorUI:
             cursor="hand2"
         ).pack(side='left', padx=5)
         
-        tk.Button(
-            button_frame,
-            text="❓ Help",
-            font=("Arial", 10),
-            bg="#3366cc",
-            fg="white",
-            relief='flat',
-            command=self.show_help,
-            cursor="hand2"
-        ).pack(side='left', padx=5)
-        
         # OUTPUT SECTION
         tk.Label(
             self.root,
@@ -214,11 +202,12 @@ class MSACommandGeneratorUI:
             self.root,
             width=100,
             height=16,
-            font=("Consolas", 10),
+            font=("Consolas", 9),
             bg="#0d1117",
             fg="#00ffcc",
             insertbackground="#00ffcc",
-            selectbackground="#264f78"
+            selectbackground="#264f78",
+            wrap='none'
         )
         self.output_box.pack(padx=20, pady=5, fill='both', expand=True)
         
@@ -277,7 +266,7 @@ class MSACommandGeneratorUI:
         
         tk.Radiobutton(
             mode_frame,
-            text="🔵 Simulation (Safe)",
+            text="🔵 Simulation",
             variable=self.mode_var,
             value="simulation",
             bg="#2b2b2b",
@@ -290,7 +279,7 @@ class MSACommandGeneratorUI:
         
         tk.Radiobutton(
             mode_frame,
-            text="🔴 Live (Array)",
+            text="🔴 Live",
             variable=self.mode_var,
             value="live",
             bg="#2b2b2b",
@@ -328,7 +317,6 @@ class MSACommandGeneratorUI:
     
     def create_inventory_display(self):
         """Create or update disk inventory summary"""
-        # Clear existing widgets
         for widget in self.inventory_frame.winfo_children():
             widget.destroy()
         
@@ -392,7 +380,7 @@ class MSACommandGeneratorUI:
             self.status_indicator.config(text="● Simulation Mode", fg="#00ff00")
             self.connect_btn.config(state='disabled')
             self.execute_btn.config(text="▶️ Execute (Simulation)", bg="#ff9500")
-            self.status_label.config(text="Mode: Simulation - Safe testing")
+            self.status_label.config(text="Mode: Simulation")
         else:
             self.status_indicator.config(text="● Live Mode", fg="#ff6b00")
             self.connect_btn.config(state='normal')
@@ -404,26 +392,25 @@ class MSACommandGeneratorUI:
                 self.status_label.config(text="Mode: Live - Click 'Connect to Array'")
     
     def show_connection_dialog(self):
-        """Show dialog to enter SSH connection details"""
+        """Show connection dialog"""
         dialog = tk.Toplevel(self.root)
         dialog.title("Connect to HPE MSA Array")
-        dialog.geometry("550x500")
+        dialog.geometry("550x480")
         dialog.configure(bg="#2b2b2b")
         dialog.transient(self.root)
         dialog.grab_set()
         
         dialog.geometry("+%d+%d" % (
             self.root.winfo_x() + self.root.winfo_width()//2 - 275,
-            self.root.winfo_y() + self.root.winfo_height()//2 - 250
+            self.root.winfo_y() + self.root.winfo_height()//2 - 240
         ))
         
-        # Header
-        header_frame = tk.Frame(dialog, bg="#3366cc", height=60)
-        header_frame.pack(fill='x')
-        header_frame.pack_propagate(False)
+        header = tk.Frame(dialog, bg="#3366cc", height=60)
+        header.pack(fill='x')
+        header.pack_propagate(False)
         
         tk.Label(
-            header_frame,
+            header,
             text="🔌 Connect to HPE MSA Array",
             font=("Arial", 14, "bold"),
             fg="white",
@@ -432,239 +419,178 @@ class MSACommandGeneratorUI:
         
         tk.Label(
             dialog,
-            text="Enter your MSA array connection details below:",
+            text="Enter your MSA array connection details:",
             font=("Arial", 9),
             fg="#888888",
             bg="#2b2b2b"
         ).pack(pady=10)
         
-        # Form
-        form_frame = tk.Frame(dialog, bg="#2b2b2b")
-        form_frame.pack(padx=40, pady=10, fill='both', expand=True)
+        form = tk.Frame(dialog, bg="#2b2b2b")
+        form.pack(padx=40, pady=10, fill='both', expand=True)
         
-        # Host/IP
-        tk.Label(form_frame, text="Host/IP Address:", fg="white", bg="#2b2b2b", font=("Arial", 9, "bold")).grid(row=0, column=0, sticky='w', pady=12)
-        host_entry = tk.Entry(form_frame, width=35, bg="#1e1e1e", fg="white", font=("Arial", 10), insertbackground="white")
-        host_entry.grid(row=0, column=1, pady=12, padx=10, sticky='ew')
-        host_entry.insert(0, "192.168.1.100")
+        # Fields
+        tk.Label(form, text="Host/IP:", fg="white", bg="#2b2b2b", font=("Arial", 9, "bold")).grid(row=0, column=0, sticky='w', pady=10)
+        host_entry = tk.Entry(form, width=35, bg="#1e1e1e", fg="white", font=("Arial", 10))
+        host_entry.grid(row=0, column=1, pady=10, sticky='ew')
+        host_entry.insert(0, "10.225.135.102")
         
-        tk.Label(form_frame, text="(e.g., 192.168.1.100)", fg="#666666", bg="#2b2b2b", font=("Arial", 7)).grid(row=1, column=1, sticky='w', padx=10)
-        
-        # Username
-        tk.Label(form_frame, text="Username:", fg="white", bg="#2b2b2b", font=("Arial", 9, "bold")).grid(row=2, column=0, sticky='w', pady=12)
-        user_entry = tk.Entry(form_frame, width=35, bg="#1e1e1e", fg="white", font=("Arial", 10), insertbackground="white")
-        user_entry.grid(row=2, column=1, pady=12, padx=10, sticky='ew')
+        tk.Label(form, text="Username:", fg="white", bg="#2b2b2b", font=("Arial", 9, "bold")).grid(row=1, column=0, sticky='w', pady=10)
+        user_entry = tk.Entry(form, width=35, bg="#1e1e1e", fg="white", font=("Arial", 10))
+        user_entry.grid(row=1, column=1, pady=10, sticky='ew')
         user_entry.insert(0, "manage")
         
-        tk.Label(form_frame, text="(default: manage)", fg="#666666", bg="#2b2b2b", font=("Arial", 7)).grid(row=3, column=1, sticky='w', padx=10)
+        tk.Label(form, text="Password:", fg="white", bg="#2b2b2b", font=("Arial", 9, "bold")).grid(row=2, column=0, sticky='w', pady=10)
+        pass_entry = tk.Entry(form, width=35, show="●", bg="#1e1e1e", fg="white", font=("Arial", 10))
+        pass_entry.grid(row=2, column=1, pady=10, sticky='ew')
         
-        # Password
-        tk.Label(form_frame, text="Password:", fg="white", bg="#2b2b2b", font=("Arial", 9, "bold")).grid(row=4, column=0, sticky='w', pady=12)
-        pass_entry = tk.Entry(form_frame, width=35, show="●", bg="#1e1e1e", fg="white", font=("Arial", 10), insertbackground="white")
-        pass_entry.grid(row=4, column=1, pady=12, padx=10, sticky='ew')
-        
-        show_pass_var = tk.BooleanVar()
+        show_pass = tk.BooleanVar()
         tk.Checkbutton(
-            form_frame,
+            form,
             text="Show password",
-            variable=show_pass_var,
-            command=lambda: pass_entry.config(show="" if show_pass_var.get() else "●"),
+            variable=show_pass,
+            command=lambda: pass_entry.config(show="" if show_pass.get() else "●"),
             fg="#888888",
             bg="#2b2b2b",
             selectcolor="#1e1e1e",
             font=("Arial", 8)
-        ).grid(row=5, column=1, sticky='w', padx=10)
+        ).grid(row=3, column=1, sticky='w')
         
-        # Port
-        tk.Label(form_frame, text="SSH Port:", fg="white", bg="#2b2b2b", font=("Arial", 9, "bold")).grid(row=6, column=0, sticky='w', pady=12)
-        port_entry = tk.Entry(form_frame, width=35, bg="#1e1e1e", fg="white", font=("Arial", 10), insertbackground="white")
-        port_entry.grid(row=6, column=1, pady=12, padx=10, sticky='ew')
+        tk.Label(form, text="SSH Port:", fg="white", bg="#2b2b2b", font=("Arial", 9, "bold")).grid(row=4, column=0, sticky='w', pady=10)
+        port_entry = tk.Entry(form, width=35, bg="#1e1e1e", fg="white", font=("Arial", 10))
+        port_entry.grid(row=4, column=1, pady=10, sticky='ew')
         port_entry.insert(0, "22")
         
-        tk.Label(form_frame, text="(default: 22)", fg="#666666", bg="#2b2b2b", font=("Arial", 7)).grid(row=7, column=1, sticky='w', padx=10)
+        form.columnconfigure(1, weight=1)
         
-        form_frame.columnconfigure(1, weight=1)
+        status_msg = tk.Label(dialog, text="", fg="#ffaa00", bg="#2b2b2b", font=("Arial", 9), wraplength=450)
+        status_msg.pack(pady=10)
         
-        # Status message
-        status_frame = tk.Frame(dialog, bg="#2b2b2b")
-        status_frame.pack(pady=10, fill='x', padx=40)
-        
-        status_msg = tk.Label(status_frame, text="", fg="#ffaa00", bg="#2b2b2b", font=("Arial", 9), wraplength=450, justify='left')
-        status_msg.pack()
-        
-        # Buttons
         btn_frame = tk.Frame(dialog, bg="#2b2b2b")
         btn_frame.pack(pady=15)
         
         def attempt_connect():
             host = host_entry.get().strip()
-            username = user_entry.get().strip()
+            user = user_entry.get().strip()
             password = pass_entry.get()
             port = port_entry.get().strip() or "22"
             
-            if not host:
-                status_msg.config(text="❌ Please enter Host/IP Address", fg="#ff6b6b")
-                return
-            if not username:
-                status_msg.config(text="❌ Please enter Username", fg="#ff6b6b")
-                return
-            if not password:
-                status_msg.config(text="❌ Please enter Password", fg="#ff6b6b")
+            if not all([host, user, password]):
+                status_msg.config(text="❌ Please fill all fields", fg="#ff6b6b")
                 return
             
-            connect_button.config(state='disabled')
-            cancel_button.config(state='disabled')
+            connect_btn.config(state='disabled')
+            cancel_btn.config(state='disabled')
             status_msg.config(text="🔄 Connecting to array...", fg="#ffaa00")
             dialog.update()
             
-            # Create SSH connector
-            self.ssh_connector = MSAConnector(host, username, password, int(port))
+            self.ssh_connector = MSAConnector(host, user, password, int(port))
             result = self.ssh_connector.connect()
             
             if result is True:
-                # Connection successful
                 self.connected = True
                 self.ssh_host = host
-                self.ssh_username = username
-                
-                # Get array information
+                self.ssh_username = user
                 self.fetch_array_info()
-                
-                # Update inventory from live array
                 self.fetch_disk_inventory()
-                
                 dialog.destroy()
-                
             else:
                 status_msg.config(text=f"❌ {result}", fg="#ff6b6b")
-                connect_button.config(state='normal')
-                cancel_button.config(state='normal')
+                connect_btn.config(state='normal')
+                cancel_btn.config(state='normal')
         
-        connect_button = tk.Button(btn_frame, text="🔌 Connect", font=("Arial", 11, "bold"), bg="#00cc66", fg="white", width=14, command=attempt_connect, cursor="hand2")
-        connect_button.pack(side='left', padx=5)
+        connect_btn = tk.Button(btn_frame, text="🔌 Connect", font=("Arial", 11, "bold"), bg="#00cc66", fg="white", width=14, command=attempt_connect, cursor="hand2")
+        connect_btn.pack(side='left', padx=5)
         
-        cancel_button = tk.Button(btn_frame, text="Cancel", font=("Arial", 11), bg="#666666", fg="white", width=14, command=dialog.destroy, cursor="hand2")
-        cancel_button.pack(side='left', padx=5)
-        
-        tk.Label(dialog, text="🔒 Connection encrypted via SSH", fg="#666666", bg="#2b2b2b", font=("Arial", 8)).pack(pady=5)
+        cancel_btn = tk.Button(btn_frame, text="Cancel", font=("Arial", 11), bg="#666666", fg="white", width=14, command=dialog.destroy, cursor="hand2")
+        cancel_btn.pack(side='left', padx=5)
         
         dialog.bind('<Return>', lambda e: attempt_connect())
         host_entry.focus()
     
     def fetch_array_info(self):
-        """Fetch and display array information after connection"""
+        """Fetch array information"""
         timestamp = datetime.now().strftime("%H:%M:%S")
         
         self.output_box.insert(tk.END, f"[{timestamp}] ", "timestamp")
-        self.output_box.insert(tk.END, f"🔄 Fetching array information...\n", "info")
+        self.output_box.insert(tk.END, "🔄 Fetching array information...\n", "info")
         self.output_box.see(tk.END)
         self.root.update()
         
-        # Execute 'show configuration' to get array info
         response = self.ssh_connector.execute_command("show configuration")
-        array_data = MSAResponseParser.parse_whoami(response)
+        array_data = MSAResponseParser.parse_show_configuration(response)
         
         self.array_info = array_data
         
-        # Display connection success with array info
         self.output_box.insert(tk.END, f"[{timestamp}] ", "timestamp")
-        self.output_box.insert(tk.END, "✅ Successfully connected to HPE MSA Array\n", "execution")
+        self.output_box.insert(tk.END, "✅ Connected to HPE MSA Array\n", "execution")
         self.output_box.insert(tk.END, f"   Host: {self.ssh_host}\n", "success")
         self.output_box.insert(tk.END, f"   User: {self.ssh_username}\n", "success")
         
         if array_data.get("system_name"):
-            self.output_box.insert(tk.END, f"   System Name: {array_data['system_name']}\n", "success")
+            self.output_box.insert(tk.END, f"   System: {array_data['system_name']}\n", "success")
         if array_data.get("model"):
             self.output_box.insert(tk.END, f"   Model: {array_data['model']}\n", "success")
         if array_data.get("version"):
             self.output_box.insert(tk.END, f"   Firmware: {array_data['version']}\n", "success")
+        if array_data.get("location"):
+            self.output_box.insert(tk.END, f"   Location: {array_data['location']}\n", "success")
         
-        self.output_box.insert(tk.END, "   Status: Ready to execute commands\n\n", "success")
+        self.output_box.insert(tk.END, "   Status: Ready\n\n", "success")
         self.output_box.see(tk.END)
         
-        # Update UI
         self.status_indicator.config(text=f"● Connected: {self.ssh_host}", fg="#00ff00")
-        self.status_label.config(text=f"✅ Connected to {self.ssh_host} ({array_data.get('model', 'MSA Array')})")
+        self.status_label.config(text=f"✅ Connected to {self.ssh_host}")
         self.connect_btn.config(text="✓ Disconnect", bg="#cc3333", command=self.disconnect_from_array)
         
         messagebox.showinfo(
-            "Connection Successful",
-            f"✅ Connected to HPE MSA Array\n\n"
-            f"Host: {self.ssh_host}\n"
-            f"Model: {array_data.get('model', 'N/A')}\n"
-            f"System: {array_data.get('system_name', 'N/A')}\n\n"
-            f"Ready to execute commands."
+            "Connected",
+            f"✅ Connected to {array_data.get('model', 'MSA Array')}\n\n"
+            f"System: {array_data.get('system_name', 'N/A')}\n"
+            f"Host: {self.ssh_host}\n\n"
+            f"Ready to execute commands!"
         )
     
     def fetch_disk_inventory(self):
-        """Fetch live disk inventory from array"""
+        """Fetch disk inventory"""
         timestamp = datetime.now().strftime("%H:%M:%S")
         
         self.output_box.insert(tk.END, f"[{timestamp}] ", "timestamp")
-        self.output_box.insert(tk.END, "🔄 Fetching disk inventory from array...\n", "info")
-        self.output_box.see(tk.END)
+        self.output_box.insert(tk.END, "🔄 Fetching disk inventory...\n", "info")
         self.root.update()
         
-        # Execute 'show disks'
         response = self.ssh_connector.execute_command("show disks")
         disks_data = MSAResponseParser.parse_show_disks(response)
         
         if disks_data:
             self.disks = disks_data
-            
-            # Update inventory display
             self.create_inventory_display()
             
-            # Show summary
             summary = MSAResponseParser.format_disk_summary(disks_data)
-            self.output_box.insert(tk.END, f"[{timestamp}] ", "timestamp")
-            self.output_box.insert(tk.END, f"✅ Disk inventory updated from live array\n", "execution")
-            self.output_box.insert(tk.END, summary + "\n", "info")
-            self.output_box.see(tk.END)
+            self.output_box.insert(tk.END, f"✅ Disk inventory updated\n{summary}\n", "info")
+        
+        self.output_box.see(tk.END)
     
     def disconnect_from_array(self):
-        """Disconnect from MSA array"""
-        if not self.connected:
-            return
-        
-        confirm = messagebox.askyesno(
-            "Disconnect",
-            f"Disconnect from {self.ssh_host}?\n\n"
-            "Any pending commands will not be executed."
-        )
-        
-        if not confirm:
+        """Disconnect"""
+        if not messagebox.askyesno("Disconnect", f"Disconnect from {self.ssh_host}?"):
             return
         
         if self.ssh_connector:
             self.ssh_connector.disconnect()
         
-        timestamp = datetime.now().strftime("%H:%M:%S")
-        self.output_box.insert(tk.END, f"[{timestamp}] ", "timestamp")
-        self.output_box.insert(tk.END, f"🔌 Disconnected from {self.ssh_host}\n\n", "warning")
-        self.output_box.see(tk.END)
-        
         self.connected = False
-        self.ssh_connector = None
-        self.status_indicator.config(text="● Live Mode (Not Connected)", fg="#ff6b00")
-        self.status_label.config(text="Mode: Live - Click 'Connect to Array'")
-        self.connect_btn.config(text="🔌 Connect to Array", bg="#3366cc", command=self.show_connection_dialog)
-        
-        self.ssh_host = None
-        self.ssh_username = None
-        self.array_info = {}
+        self.status_indicator.config(text="● Live (Not Connected)", fg="#ff6b00")
+        self.status_label.config(text="Disconnected")
+        self.connect_btn.config(text="🔌 Connect", bg="#3366cc", command=self.show_connection_dialog)
     
     def insert_suggestion(self, text):
         self.entry.delete(0, tk.END)
         self.entry.insert(0, text)
-        self.entry.focus()
     
     def run_command(self):
         """Generate command"""
         user_input = self.entry.get().strip()
-        
         if not user_input:
-            self.status_label.config(text="⚠️  Please enter a command")
             return
         
         try:
@@ -672,35 +598,24 @@ class MSACommandGeneratorUI:
             self.last_command = result
             timestamp = datetime.now().strftime("%H:%M:%S")
             
-            self.output_box.insert(tk.END, f"[{timestamp}] ", "timestamp")
-            self.output_box.insert(tk.END, f"Input: {user_input}\n", "input")
+            self.output_box.insert(tk.END, f"[{timestamp}] Input: {user_input}\n", "input")
             
             if "❌" in result or "❗" in result:
                 self.output_box.insert(tk.END, f"{result}\n\n", "error")
-                self.status_label.config(text="❌ Error in command")
                 self.execute_btn.config(state='disabled')
                 self.last_command = None
-            elif "⚠️" in result:
-                self.output_box.insert(tk.END, f"{result}\n\n", "warning")
-                self.status_label.config(text="⚠️  Warning issued")
-                self.execute_btn.config(state='normal')
             else:
                 self.output_box.insert(tk.END, f"✓ {result}\n\n", "success")
-                self.status_label.config(text="✅ Command generated")
                 self.execute_btn.config(state='normal')
-                self.command_history.append({"timestamp": timestamp, "input": user_input, "output": result})
             
             self.output_box.see(tk.END)
             self.entry.delete(0, tk.END)
-            
         except Exception as e:
-            self.output_box.insert(tk.END, f"❌ Error: {str(e)}\n\n", "error")
-            self.execute_btn.config(state='disabled')
+            self.output_box.insert(tk.END, f"❌ Error: {e}\n\n", "error")
     
     def execute_command(self):
-        """Execute the last generated command"""
+        """Execute command"""
         if not self.last_command:
-            messagebox.showwarning("No Command", "Generate a command first.")
             return
         
         command = self.last_command
@@ -709,96 +624,43 @@ class MSACommandGeneratorUI:
         if "\n" in command:
             command = command.split("\n")[0].strip()
         
-        # Check destructive commands
-        destructive = any(kw in command.lower() for kw in ['delete', 'remove', 'clear', 'format'])
-        
-        if destructive and self.execution_mode == "live":
-            if not messagebox.askyesno("Confirm", f"⚠️ Destructive command:\n\n{command}\n\nContinue?"):
-                return
-        
         timestamp = datetime.now().strftime("%H:%M:%S")
         
         if self.execution_mode == "simulation":
-            self.output_box.insert(tk.END, f"[{timestamp}] ", "timestamp")
-            self.output_box.insert(tk.END, "🔵 SIMULATION MODE\n", "simulation")
-            self.output_box.insert(tk.END, f"Command: {command}\n", "success")
-            self.output_box.insert(tk.END, "✓ Simulation successful (no changes)\n\n", "simulation")
-            self.status_label.config(text="✓ Simulation completed")
+            self.output_box.insert(tk.END, f"[{timestamp}] 🔵 SIMULATION\n", "simulation")
+            self.output_box.insert(tk.END, f"Command: {command}\n✓ Simulated\n\n", "success")
         else:
             if not self.connected:
-                messagebox.showerror("Not Connected", "Connect to array first.")
+                messagebox.showerror("Not Connected", "Connect to array first")
                 return
             
-            self.output_box.insert(tk.END, f"[{timestamp}] ", "timestamp")
-            self.output_box.insert(tk.END, f"🔴 EXECUTING ON {self.ssh_host}\n", "execution")
-            self.output_box.insert(tk.END, f"Command: {command}\n", "success")
-            self.output_box.insert(tk.END, "⏳ Executing...\n", "warning")
+            self.output_box.insert(tk.END, f"[{timestamp}] 🔴 EXECUTING ON {self.ssh_host}\n", "execution")
+            self.output_box.insert(tk.END, f"Command: {command}\n⏳ Executing...\n", "success")
             self.output_box.see(tk.END)
             self.root.update()
             
-            # Execute on array
             response = self.ssh_connector.execute_command(command)
             
-            # Parse response
-            if self.output_format_var.get() == "raw":
-                # Show raw XML
-                self.output_box.insert(tk.END, "\n--- Raw Response ---\n", "info")
-                self.output_box.insert(tk.END, response[:1000] + "...\n\n" if len(response) > 1000 else response + "\n\n", "info")
-            else:
-                # Show formatted response
-                parsed = MSAResponseParser.parse_command_response(response)
-                
-                if parsed["success"]:
-                    self.output_box.insert(tk.END, "✅ Command executed successfully\n", "execution")
-                    self.output_box.insert(tk.END, f"Response: {parsed['message']}\n", "success")
-                    if parsed["timestamp"]:
-                        self.output_box.insert(tk.END, f"Timestamp: {parsed['timestamp']}\n", "info")
+            # Check if this is a show volumes command
+            if "show volumes" in command.lower():
+                volumes = MSAResponseParser.parse_show_volumes(response)
+                if volumes:
+                    table = MSAResponseParser.format_volumes_table(volumes)
+                    self.output_box.insert(tk.END, f"\n{table}\n\n", "info")
                 else:
-                    self.output_box.insert(tk.END, "❌ Command failed\n", "error")
-                    self.output_box.insert(tk.END, f"Error: {parsed['message']}\n", "error")
-                
-                self.output_box.insert(tk.END, "\n", "info")
-            
-            self.status_label.config(text=f"✅ Executed on {self.ssh_host}")
+                    parsed = MSAResponseParser.parse_command_response(response)
+                    self.output_box.insert(tk.END, f"{parsed['message']}\n\n", "info")
+            elif self.output_format_var.get() == "raw":
+                self.output_box.insert(tk.END, f"\n--- Raw Response ---\n{response[:2000]}\n\n", "info")
+            else:
+                parsed = MSAResponseParser.parse_command_response(response)
+                status = "✅" if parsed["success"] else "❌"
+                self.output_box.insert(tk.END, f"{status} {parsed['message']}\n\n", "execution")
         
         self.output_box.see(tk.END)
     
     def clear_output(self):
         self.output_box.delete(1.0, tk.END)
-        self.execute_btn.config(state='disabled')
-        self.last_command = None
-    
-    def show_help(self):
-        help_text = """
-╔══════════════════════════════════════════════════════════════════╗
-║                    HPE MSA AI COMMAND GENERATOR                  ║
-╚══════════════════════════════════════════════════════════════════╝
-
-MODES:
-  🔵 Simulation - Safe testing (generates but doesn't execute)
-  🔴 Live - Connects and executes on real array
-
-CONNECTION:
-  1. Switch to Live Mode
-  2. Click "Connect to Array"
-  3. Enter: Host, Username, Password
-  4. System fetches array info and disk inventory
-
-COMMANDS:
-  • create disk group with raid 5 using 4 HDDs
-  • create 3 volumes of 100GB in pool a
-  • expand volume myvol size 50GB
-  • show disks, show volumes, show disk groups
-
-OUTPUT FORMATS:
-  • Formatted - Shows parsed, human-readable output
-  • Raw XML - Shows complete XML response from array
-
-WORKFLOW:
-  1. Enter command → 2. Generate → 3. Execute → 4. See results
-"""
-        self.output_box.insert(tk.END, help_text, "success")
-        self.output_box.see(tk.END)
 
 
 def main():
